@@ -3,35 +3,37 @@ import random
 import torch
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, dna_sequence_length, dna_subsequences_length, number_of_queries):
-        self.dna_sequence_length=dna_sequence_length
-        self.dna_subsequences_length=dna_subsequences_length
-        self.number_of_queries=number_of_queries
+    def __init__(self, dna_sequence_length, dna_queries_length, number_of_queries):
+        self.dna_sequence_length = dna_sequence_length
+        self.dna_queries_length = dna_queries_length
+        self.number_of_queries = number_of_queries
         
-        self.hdc = hdc.Encoder(self.dna_sequence_length, self.dna_subsequences_length, self.number_of_queries)
-        self.dna_sequence = self.hdc.generate_dna_sequence()
-        self.dna_true_subsequences = self.hdc.generate_true_dna_subsequences()
-        self.dna_false_subsequences = []
+        self.hdc = hdc.Encoder(self.dna_sequence_length, self.dna_queries_length)
+        self.dna_sequence = self.hdc.hd_dna_sequence()
+        self.dna_true_queries = self.hdc.generate_true_dna_queries()
+        self.dna_false_queries = set(map(tuple, self.hdc.generate_all_patterns().numpy())) - set(map(tuple, self.dna_true_queries.numpy()))
 
-        for i, j in zip(self.dna_sequence, self.dna_true_subsequences):
-            false_subseq = torch.masked_select(i, i!=j).unsqueeze(0)
-            if false_subseq.size(1) < self.dna_subsequences_length:
-                false_subseq = torch.cat((false_subseq, torch.zeros(1, self.dna_subsequences_length - false_subseq.size(1), dtype=torch.int64)), dim=1)
-            self.dna_false_subsequences.append(false_subseq)
+        # Convert sets to lists to enable indexing
+        self.dna_true_queries = list(self.dna_true_queries)
+        self.dna_false_queries = list(self.dna_false_queries)
         
-        true_size = self.dna_true_subsequences.size(1)
-        self.dna_reference_library = torch.cat(
-            (self.dna_true_subsequences, *self.dna_false_subsequences),
-            dim=0
-        )
+        # Keeping as sets if random access is sufficient
+        # Convert to list only if sequential access or specific indexing is required
+
+        # Create a list of indices with equal numbers of true and false queries
+        self.query_indices = ['true'] * number_of_queries + ['false'] * number_of_queries
+        random.shuffle(self.query_indices)
 
     def __len__(self):
-        return self.number_of_queries
+        return 2 * self.number_of_queries
     
     def __getitem__(self, index):
-        if any(torch.equal(self.dna_true_subsequences, sub_array) for sub_array in self.dna_reference_library):
-            result = {'label': True, 'dna_subsequence': self.dna_true_subsequences[index]}
+        query_type = self.query_indices[index]
+        if query_type == 'true':
+            query_index = index % len(self.dna_true_queries)
+            query = random.choice(self.dna_true_queries)  # Using random.choice for efficiency
+            return {'label': True, 'dna_subsequence': query}
         else:
-            result = {'label': False, 'dna_subsequence': self.dna_false_subsequences[index]}
-        return result
-    
+            query_index = index % len(self.dna_false_queries)
+            query = random.choice(self.dna_false_queries)  # Using random.choice for efficiency
+            return {'label': False, 'dna_subsequence': query}
