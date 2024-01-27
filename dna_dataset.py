@@ -15,10 +15,7 @@ class Dataset(torch.utils.data.Dataset):
 
         # Convert sets to lists to enable indexing
         self.dna_true_queries = list(self.dna_true_queries)
-        self.dna_false_queries = list(self.dna_false_queries)
-        
-        # Keeping as sets if random access is sufficient
-        # Convert to list only if sequential access or specific indexing is required
+        self.dna_false_queries = torch.tensor(list(self.dna_false_queries))
 
         # Create a list of indices with equal numbers of true and false queries
         self.query_indices = ['true'] * number_of_queries + ['false'] * number_of_queries
@@ -32,8 +29,8 @@ class Dataset(torch.utils.data.Dataset):
         if query_type == 'true':
             query_index = index % len(self.dna_true_queries)
             query = random.choice(self.dna_true_queries)  # Using random.choice for efficiency
-            return {'label': True, 'dna_subsequence': query}
+            return {'label': True, 'dna_query': query}
         else:
             query_index = index % len(self.dna_false_queries)
             query = random.choice(self.dna_false_queries)  # Using random.choice for efficiency
-            return {'label': False, 'dna_subsequence': query}
+            return {'label': False, 'dna_query': query}
