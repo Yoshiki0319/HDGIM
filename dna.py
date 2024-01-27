@@ -9,5 +9,7 @@ class random_generate:
     def generate_dna_sequence(self):
         return [random.choice(self.bases) for _ in range(self.dna_sequence_length)]
     
-    def generate_dna_query(self):
-        return [random.choice(self.bases) for _ in range(self.dna_query_length)]
+    def save_dna_sequence(self, filename):
+        with open(filename, 'w') as file:
+            for base in self.generate_dna_sequence():
+                file.write(base)
