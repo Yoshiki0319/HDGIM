@@ -18,7 +18,7 @@ class Encoder:
         self.base_hypervectors = self.generate_base_hypervectors()
 
         self.encoded_hypervector = None
-        self.encoded_hypervector_library = None
+        self.hdc_library = None
 
     def generate_base_hypervectors(self):
         bases = ['A', 'T', 'C', 'G']
@@ -38,13 +38,5 @@ class Encoder:
             
             chunk_hypervectors.append(chunk_hypervector)
 
-        self.encoded_hypervector_library = torch.stack(chunk_hypervectors)
-        self.encoded_hypervector = torch.sum(self.encoded_hypervector_library, dim=0)
-    
-    def bundling(self):
-        chunk_hypervectors = torch.zeros(self.dimension)
-        for shift, sequence in enumerate(self.dna_sequence):
-            base_hypervector = torch.roll(self.base_hypervectors[sequence], shifts=shift, dims=0)
-            chunk_hypervector = torch.squeeze(torch.mul(chunk_hypervector, base_hypervector))
-        
-        return chunk_hypervector
+        self.hdc_library = torch.stack(chunk_hypervectors)
+        self.encoded_hypervector = torch.sum(self.hdc_library, dim=0) ## This is the result of bundling ...?
