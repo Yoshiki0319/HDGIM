@@ -3,34 +3,48 @@ import dna_to_numbers
 import torch
 
 class Encoder:
-    def __init__(self, dimention, dna_sequence_length, dna_queries_length, number_of_samples):
-        self.dimention = dimention
+    def __init__(self, dimension, dna_sequence_length, dna_subsequences_length, number_of_samples):
+        self.dimension = dimension
         self.dna_sequence_length = dna_sequence_length
-        self.dna_queries_length = dna_queries_length
+        self.dna_subsequences_length = dna_subsequences_length
         self.number_of_samples = number_of_samples
         
-        self.d_to_n = dna_to_numbers.Encoder(self.dna_sequence_length, self.dna_queries_length)
-        self.DNA_dataset = dna_dataset.Dataset(self.dna_sequence_length, self.dna_queries_length, number_of_samples)
+        self.dna_converter = dna_to_numbers.Encoder(dna_sequence_length, dna_subsequences_length)
+        self.dna_dataset = dna_dataset.Dataset(dna_sequence_length, dna_subsequences_length, number_of_samples)
 
-        self.dna_sequence = None
-        self.dna_queries = None
-        self.hyper_dimensional_vector = None
+        self.dna_sequence = self.dna_converter.dna_num_sequence()
+        self.dna_subsequences = self.dna_converter.generate_dna_subsequences()
 
-    def generate_dna_sequence(self):
-        self.dna_sequence = self.d_to_n.dna_num_sequence()
+        self.base_hypervectors = self.generate_base_hypervectors()
+
+        self.encoded_hypervector = None
+        self.encoded_hypervector_library = None
+
+    def generate_base_hypervectors(self):
+        bases = ['A', 'T', 'C', 'G']
+        return {
+            base: torch.empty(self.dimension).uniform_(-torch.pi, torch.pi)
+            for base in bases
+        }
+
+    def binding(self):
+        chunk_hypervectors = []
+        for shift, subsequence in enumerate(self.dna_subsequences):
+            chunk_hypervector = torch.zeros(self.dimension)
+
+            for base in subsequence:
+                base_hypervector = torch.roll(self.base_hypervectors[base], shifts=shift, dims=0)
+                chunk_hypervector = torch.squeeze(torch.mul(chunk_hypervector, base_hypervector))
+            
+            chunk_hypervectors.append(chunk_hypervector)
+
+        self.encoded_hypervector_library = torch.stack(chunk_hypervectors)
+        self.encoded_hypervector = torch.sum(self.encoded_hypervector_library, dim=0)
     
-    def generate_dna_queries(self):
-        self.dna_queries = self.d_to_n.generate_dna_queries()
-    
-    def generate_hyper_dimensional_vector(self, input_tensor):
-        return ((input_tensor.float() / 3) * 2 * torch.pi) - torch.pi
+    def bundling(self):
+        chunk_hypervectors = torch.zeros(self.dimension)
+        for shift, sequence in enumerate(self.dna_sequence):
+            base_hypervector = torch.roll(self.base_hypervectors[sequence], shifts=shift, dims=0)
+            chunk_hypervector = torch.squeeze(torch.mul(chunk_hypervector, base_hypervector))
         
-    
-
-    
-
-    
-
-    
-
-
+        return chunk_hypervector
