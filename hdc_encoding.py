@@ -30,7 +30,7 @@ class Encoder:
     def binding(self):
         chunk_hypervectors = []
         for shift, subsequence in enumerate(self.dna_subsequences):
-            chunk_hypervector = torch.zeros(self.dimension)
+            chunk_hypervector = torch.ones(1,self.dimension)
 
             for base in subsequence:
                 base_hypervector = torch.roll(self.base_hypervectors[base], shifts=shift, dims=0)
