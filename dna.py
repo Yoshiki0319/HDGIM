@@ -1,15 +1,35 @@
 import random
+import torch
 
-class random_generate:
-    def __init__(self, dna_sequence_length, dna_query_length):
+class DNASequenceGenerator:
+    def __init__(self, dna_sequence_length, seed=42):
         self.dna_sequence_length = dna_sequence_length
-        self.dna_query_length = dna_query_length
+        self.seed = seed
         self.bases = ['A', 'T', 'C', 'G']
+        random.seed(self.seed)
     
-    def generate_dna_sequence(self):
-        return [random.choice(self.bases) for _ in range(self.dna_sequence_length)]
+    def generate_dna_sequence_tensor(self):
+        dna_sequence = [random.choice(self.bases) for _ in range(self.dna_sequence_length)]
+        convert = {'A': 0, 'T': 1, 'C': 2, 'G': 3}
+        return torch.tensor([convert[base] for base in dna_sequence], dtype=torch.int64)
+
+class Encoder:
+    def __init__(self, dna_sequence_length, dna_subsequences_length):
+        self.dna_subsequences_length = dna_subsequences_length
+        generator = DNASequenceGenerator(dna_sequence_length)
+        self.dna_sequence_tensor = generator.generate_dna_sequence_tensor()
+        self.dna_true_subsequences = self.generate_dna_subsequences()
     
-    def save_dna_sequence(self, filename):
-        with open(filename, 'w') as file:
-            for base in self.generate_dna_sequence():
-                file.write(base)
+    def generate_dna_subsequences(self):
+        dna_true_subsequences = []
+        for i in range(len(self.dna_sequence_tensor) - self.dna_subsequences_length + 1):
+            subsequence = self.dna_sequence_tensor[i:i + self.dna_subsequences_length]
+            dna_true_subsequences.append(subsequence)
+        return torch.stack(dna_true_subsequences)
+
+    def is_included(self, dna_subsequence_tensor):
+        length = dna_subsequence_tensor.size(0)
+        for i in range(len(self.dna_sequence_tensor) - length + 1):
+            if torch.equal(self.dna_sequence_tensor[i:i + length], dna_subsequence_tensor):
+                return True
+        return False

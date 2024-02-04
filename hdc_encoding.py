@@ -1,5 +1,4 @@
 import dna_dataset
-import dna_to_numbers
 import torch
 
 class Encoder:

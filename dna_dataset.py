@@ -1,50 +1,57 @@
-import dna_to_numbers
+import dna
 import random
 import torch
+import torch.utils.data
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, dna_sequence_length, dna_subsequences_length, number_of_samples):
+    def __init__(self, dna_sequence_length, dna_subsequence_length, number_of_true, number_of_false, seed=42):
         self.dna_sequence_length = dna_sequence_length
-        self.dna_subsequences_length = dna_subsequences_length
-        self.number_of_samples = number_of_samples
-        
-        self.d_to_n = dna_to_numbers.Encoder(self.dna_sequence_length, self.dna_subsequences_length)
-        self.dna_sequence = self.d_to_n.dna_num_sequence()
-        self.dna_true_subsequences = self.d_to_n.generate_dna_subsequences()
-        self.dna_false_subsequences = set(map(tuple, self.d_to_n.generate_all_patterns().numpy())) - set(map(tuple, self.dna_true_subsequences.numpy()))
+        self.dna_subsequence_length = dna_subsequence_length
+        self.number_of_true = number_of_true
+        self.number_of_false = number_of_false
+        self.seed = seed
+        random.seed(self.seed)
 
-        # Convert sets to lists to enable indexing
-        self.dna_true_subsequences = list(self.dna_true_subsequences)
-        self.dna_false_subsequences = torch.tensor(list(self.dna_false_subsequences))
+        # Generate a DNA sequence
+        dna_sequence_generator = dna.DNASequenceGenerator(dna_sequence_length)
+        self.dna_sequence = dna_sequence_generator.generate_dna_sequence_tensor()
 
-        # Create a list of indices with equal numbers of true and false subsequences
-        self.query_indices = ['true'] * number_of_samples + ['false'] * number_of_samples
-        random.shuffle(self.query_indices)
+        # Generate true subsequences
+        self.encoder = dna.Encoder(dna_sequence_length, dna_subsequence_length)
+        self.dna_true_subsequences = self.encoder.generate_dna_subsequences()
 
-        self.true_samples = None
-        self.false_samples = None
+        # Generate false subsequences
+        self.dna_false_subsequences = []
+        false_subsequences_set = set()  # Set for checking uniqueness of tuples
+
+        while len(self.dna_false_subsequences) < self.number_of_false:
+            false_subsequence = [random.choice([0, 1, 2, 3]) for _ in range(self.dna_subsequence_length)]
+            false_subsequence_tuple = tuple(false_subsequence)  # Convert list to tuple
+
+            if false_subsequence_tuple not in false_subsequences_set:
+                # Check if the subsequence is not included in the DNA sequence
+                if not self.encoder.is_included(torch.tensor(false_subsequence, dtype=torch.int64)):
+                    false_subsequences_set.add(false_subsequence_tuple)  # Add tuple to set
+                    self.dna_false_subsequences.append(false_subsequence)
+
+        # Convert the list of unique subsequences to a tensor
+        self.dna_false_subsequences = torch.stack([torch.tensor(subseq, dtype=torch.int64) for subseq in self.dna_false_subsequences])
+
+
+        # Combine true and false subsequences
+        self.samples = torch.cat((self.dna_true_subsequences[:number_of_true], self.dna_false_subsequences[:number_of_false]), dim=0)
+
+        # Shuffle the indices
+        self.indices = list(range(len(self.samples)))
+        random.shuffle(self.indices)
 
     def __len__(self):
-        return 2 * self.number_of_samples
+        return len(self.samples)
     
-    def __getitem__(self, index):
-        query_type = self.query_indices[index]
-        if query_type == 'true':
-            query_index = index % len(self.dna_true_subsequences)
-            query = random.choice(self.dna_true_subsequences)  # Using random.choice for efficiency
-            self.true_samples = query
-            return {'label': True, 'dna_query': query}
-        else:
-            query_index = index % len(self.dna_false_subsequences)
-            query = random.choice(self.dna_false_subsequences)  # Using random.choice for efficiency
-            self.false_samples = query
-            return {'label': False, 'dna_query': query}
+    def __getitem__(self, idx):
+        label = self.encoder.is_included(self.samples[idx])
+        dna_query = self.samples[idx]
+        return {'label': label, 'dna_query': dna_query}
     
     def get_dna_sequence(self):
         return self.dna_sequence
-    
-    def get_dna_subsequences(self):
-        return self.true_samples
-    
-    def get_false_dna_subsequences(self):
-        return self.false_samples
