@@ -50,8 +50,6 @@ class Dataset(torch.utils.data.Dataset):
     
     def __getitem__(self, idx):
         label = self.encoder.is_included(self.samples[idx])
-        dna_query = self.samples[idx]
-        return {'label': label, 'dna_query': dna_query}
+        dna_subsequence = self.samples[idx]
+        return {'label': label, 'dna_subsequence': dna_subsequence}
     
-    def get_dna_sequence(self):
-        return self.dna_sequence
