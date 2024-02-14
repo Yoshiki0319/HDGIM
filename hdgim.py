@@ -87,25 +87,50 @@ class HDGIM:
         return quantized_values
     
     def adding_noise(self):
-        self.quantized_hypervector_with_noise = self.quantized_hypervector
-        for i, value in enumerate(self.quantized_hypervector):
-            is_changed = random.random() < self.noise
-            if not is_changed:
-                continue
+        self.quantized_hypervector_with_noise = self.quantized_hypervector.clone()
+        for i in range(self.quantized_hypervector_with_noise.size(0)):
+            for j in range(self.quantized_hypervector_with_noise.size(1)):
+                is_changed = random.random() < self.noise
+                if not is_changed:
+                    continue
 
-            is_in_range = 0
-            num = value.item()
-
-            if num == 0:
-                is_in_range = 1
-            elif num == pow(2, self.bit_precision):
                 is_in_range = 0
-            else:
-                is_in_range = random.randint(0, 1)
+                num = self.quantized_hypervector_with_noise[i][j].item()
 
-            changed_value = -1 if is_in_range == 0 else 1
-            noise_value = num + changed_value
-            self.quantized_hypervector_with_noise[i] = noise_value
+                if num == 0:
+                    is_in_range = 1
+                elif num == pow(2, self.bit_precision) - 1:
+                    is_in_range = 0
+                else:
+                    is_in_range = random.randint(0, 1)
+
+                changed_value = -1 if is_in_range == 0 else 1
+                noise_value = num + changed_value
+                self.quantized_hypervector_with_noise[i][j] = noise_value
+
+    def adding_noise_arbitrary_sequence(self, data):
+        quantized_data_with_noise = data.clone()
+        for i in range(quantized_data_with_noise.size(0)):
+            for j in range(quantized_data_with_noise.size(1)):
+                is_changed = random.random() < self.noise
+                if not is_changed:
+                    continue
+
+                is_in_range = 0
+                num = quantized_data_with_noise[i][j].item()
+
+                if num == 0:
+                    is_in_range = 1
+                elif num == pow(2, self.bit_precision) - 1:
+                    is_in_range = 0
+                else:
+                    is_in_range = random.randint(0, 1)
+
+                changed_value = -1 if is_in_range == 0 else 1
+                noise_value = num + changed_value
+                quantized_data_with_noise[i][j] = noise_value
+
+        return quantized_data_with_noise
     
     def hamming_distance(self, hypervector1, hypervector2):
         return torch.sum(torch.abs(hypervector1 - hypervector2))
@@ -137,10 +162,10 @@ class HDGIM:
                 query = torch.squeeze(data['dna_subsequence'])
                 encoded_query = self.binding_arbitrary_sequence(query)
                 quantized_query = self.quantize_arbitrary_sequence(encoded_query)
+                quantized_query_with_noise = self.adding_noise_arbitrary_sequence(quantized_query)
 
                 label = data['label'].item()
-                sim = (self.hamming_distance(self.quantized_hypervector_with_noise, quantized_query)) / self.dimension
-                print(sim)
+                sim = (self.hamming_distance(self.quantized_hypervector_with_noise, quantized_query_with_noise)) / self.dimension
 
                 if (sim < threshold) and not label:
                     tn_cnt += 1
