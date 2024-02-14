@@ -1,10 +1,11 @@
 import dna_dataset
 import torch
 from torch.distributions.normal import Normal
+import random
 from torch.utils.data import DataLoader
 
 class HDGIM:
-    def __init__(self, dimension, dna_sequence_length, dna_subsequences_length, number_of_true, number_of_false, bit_precision, noise):
+    def __init__(self, dimension, dna_sequence_length, dna_subsequences_length, number_of_true, number_of_false, bit_precision, noise, seed=42):
         self.dimension = dimension
         self.dna_sequence_length = dna_sequence_length
         self.dna_subsequences_length = dna_subsequences_length
@@ -12,6 +13,7 @@ class HDGIM:
         self.number_of_false = number_of_false
         self.bit_precision = bit_precision
         self.noise = noise
+        random.seed(seed)
         
         self.dna_dataset = dna_dataset.Dataset(dna_sequence_length, dna_subsequences_length, number_of_true, number_of_false)
 
@@ -23,6 +25,9 @@ class HDGIM:
         self.encoded_hypervector = None
         self.hdc_library = None
 
+        self.quantized_hypervector_with_noise = None
+
+
     def generate_base_hypervectors(self):
         return {
             num: torch.empty(self.dimension).uniform_(-torch.pi, torch.pi)
@@ -32,28 +37,27 @@ class HDGIM:
     def binding(self):
         chunk_hypervectors = []
         for shift, subsequence in enumerate(self.dna_subsequences):
-            chunk_hypervector = torch.ones(1, self.dimension)
+            chunk_hypervector = torch.ones((1, self.dimension))
             
-            for base_num in subsequence[1:]:
+            for base_num in subsequence:
                 base_index = base_num.item()
                 base_hypervector = self.base_hypervectors[base_index]
-                chunk_hypervector =  torch.squeeze(torch.mul(chunk_hypervector, base_hypervector))
+                chunk_hypervector = chunk_hypervector * base_hypervector  
 
-            chunk_hypervector = torch.roll(chunk_hypervector, shifts=shift, dims=0)
+            chunk_hypervector = torch.roll(chunk_hypervector, shifts=shift, dims=1) 
             chunk_hypervectors.append(chunk_hypervector)
         
         self.hdc_library = torch.stack(chunk_hypervectors)
-        self.encoded_hypervector = torch.sum(self.hdc_library, dim=0)
-    
-    def binding_arbitary_sequence(self, data):
-        encoded_data_hypervector = torch.ones(1, self.dimension)
+        self.encoded_hypervector = torch.sum(self.hdc_library, dim=1)
+
+    def binding_arbitrary_sequence(self, data):
+        encoded_data_hypervector = torch.ones((1, self.dimension))
         
-        for base_num in data[1:]:
+        for base_num in data:
             base_index = base_num.item()
             base_hypervector = self.base_hypervectors[base_index]
-            encoded_data_hypervector = torch.squeeze(torch.mul(encoded_data_hypervector, base_hypervector))
+            encoded_data_hypervector = torch.mul(encoded_data_hypervector, base_hypervector)  
         
-        encoded_data_hypervector = torch.roll(encoded_data_hypervector, shifts=0, dims=0)
         return encoded_data_hypervector
     
     def quantize(self):
@@ -73,7 +77,7 @@ class HDGIM:
         self.quantized_hypervector = torch.zeros_like(quantized_values)
         self.quantized_hypervector.scatter_(0, indices, quantized_values)
     
-    def quantize_arbitary_sequence(self, data):
+    def quantize_arbitrary_sequence(self, data):
         sorted_hypervector, indices = torch.sort(data)
 
         mean = torch.mean(sorted_hypervector)
@@ -92,12 +96,34 @@ class HDGIM:
 
         return quantized_data
     
+    def adding_noise(self):
+        self.quantized_hypervector_with_noise = self.quantized_hypervector
+        for i, value in enumerate(self.quantized_hypervector):
+            is_changed = random.random() < self.noise
+            if not is_changed:
+                continue
+
+            is_in_range = 0
+            num = value.item()
+
+            if num == 0:
+                is_in_range = 1
+            elif num == pow(2, self.bit_precision):
+                is_in_range = 0
+            else:
+                is_in_range = random.randint(0, 1)
+
+            changed_value = -1 if is_in_range == 0 else 1
+            noise_value = num + changed_value
+            self.quantized_hypervector_with_noise[i] = noise_value
+    
     def hamming_distance(self, hypervector1, hypervector2):
         return torch.sum(torch.abs(hypervector1 - hypervector2))
     
     def train(self, epoch, lr, threshold, return_info, return_data):
         train_dataset = self.dna_dataset
-        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False)
+        
+        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)
         list_accuracy = []
         true_similarity = []
         false_similarity = []
@@ -115,42 +141,43 @@ class HDGIM:
             true_similarity.append([])
             false_similarity.append([])
 
-            for i, data in enumerate(train_dataloader):
+            for data in train_dataloader:
                 similarity = 0
 
                 query = torch.squeeze(data['dna_subsequence'])
-                encoded_query = self.binding_arbitary_sequence(query)
-                quantized_query = self.quantize_arbitary_sequence(encoded_query)
+                encoded_query = self.binding_arbitrary_sequence(query)
+                quantized_query = self.quantize_arbitrary_sequence(encoded_query)
 
                 label = data['label'].item()
+                sim = (self.hamming_distance(self.quantized_hypervector_with_noise, quantized_query)) / self.dimension
 
-                similarity = self.hamming_distance(self.quantized_hypervector, quantized_query)
-
-                if (similarity < threshold) and (label == False):
+                if (sim < threshold) and not label:
                     tn_cnt += 1
                     correct_cnt += 1
-                elif (similarity >= threshold) and (label == True):
+                elif (sim >= threshold) and label:
                     tp_cnt += 1
                     correct_cnt += 1
-                elif (similarity >= threshold) and (label == False):
+                elif (sim >= threshold) and not label:
                     self.encoded_hypervector -= lr * encoded_query
                     self.quantize()
+                    self.adding_noise()
                     fn_cnt += 1
-                else:
+                elif (sim < threshold) and label:
                     self.encoded_hypervector += lr * encoded_query
                     self.quantize()
+                    self.adding_noise()
                     fp_cnt += 1
 
-                if label is True:
-                    true_similarity[e].append(similarity)
+                if label:
+                    true_similarity[e].append(sim)
                 else:
-                    false_similarity[e].append(similarity)
+                    false_similarity[e].append(sim)
 
-            accuracy = round(correct_cnt / len(train_dataset)*100, 2)
+            accuracy = round(correct_cnt * 100 / len(train_dataset), 2)
             list_accuracy.append(accuracy)
 
             if return_info:
-                print("Epoch: {} | Accuracy: {}% | TP: {} | TN: {} | FP: {} | FN: {}".format(e, accuracy, tp_cnt, tn_cnt, fp_cnt, fn_cnt))
-        
+                print(f"Epoch: {e} | Accuracy: {accuracy}% | TP: {tp_cnt} | TN: {tn_cnt} | FP: {fp_cnt} | FN: {fn_cnt}")
+
         if return_data:
             return list_accuracy, true_similarity, false_similarity
