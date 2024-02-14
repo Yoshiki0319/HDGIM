@@ -1,0 +1,156 @@
+import dna_dataset
+import torch
+from torch.distributions.normal import Normal
+from torch.utils.data import DataLoader
+
+class HDGIM:
+    def __init__(self, dimension, dna_sequence_length, dna_subsequences_length, number_of_true, number_of_false, bit_precision, noise):
+        self.dimension = dimension
+        self.dna_sequence_length = dna_sequence_length
+        self.dna_subsequences_length = dna_subsequences_length
+        self.number_of_true = number_of_true
+        self.number_of_false = number_of_false
+        self.bit_precision = bit_precision
+        self.noise = noise
+        
+        self.dna_dataset = dna_dataset.Dataset(dna_sequence_length, dna_subsequences_length, number_of_true, number_of_false)
+
+        self.dna_sequence = self.dna_dataset.dna_sequence
+        self.dna_subsequences = self.dna_dataset.samples
+        
+        self.base_hypervectors = self.generate_base_hypervectors()
+
+        self.encoded_hypervector = None
+        self.hdc_library = None
+
+    def generate_base_hypervectors(self):
+        return {
+            num: torch.empty(self.dimension).uniform_(-torch.pi, torch.pi)
+            for num in range(4)
+        }
+    
+    def binding(self):
+        chunk_hypervectors = []
+        for shift, subsequence in enumerate(self.dna_subsequences):
+            chunk_hypervector = torch.ones(1, self.dimension)
+            
+            for base_num in subsequence[1:]:
+                base_index = base_num.item()
+                base_hypervector = self.base_hypervectors[base_index]
+                chunk_hypervector =  torch.squeeze(torch.mul(chunk_hypervector, base_hypervector))
+
+            chunk_hypervector = torch.roll(chunk_hypervector, shifts=shift, dims=0)
+            chunk_hypervectors.append(chunk_hypervector)
+        
+        self.hdc_library = torch.stack(chunk_hypervectors)
+        self.encoded_hypervector = torch.sum(self.hdc_library, dim=0)
+    
+    def binding_arbitary_sequence(self, data):
+        encoded_data_hypervector = torch.ones(1, self.dimension)
+        
+        for base_num in data[1:]:
+            base_index = base_num.item()
+            base_hypervector = self.base_hypervectors[base_index]
+            encoded_data_hypervector = torch.squeeze(torch.mul(encoded_data_hypervector, base_hypervector))
+        
+        encoded_data_hypervector = torch.roll(encoded_data_hypervector, shifts=0, dims=0)
+        return encoded_data_hypervector
+    
+    def quantize(self):
+        sorted_hypervector, indices = torch.sort(self.encoded_hypervector)
+
+        mean = torch.mean(sorted_hypervector)
+        std = torch.std(sorted_hypervector)
+        normalized_hypervector = (sorted_hypervector - mean) / std
+
+        normal_dist = Normal(torch.tensor([0.0]), torch.tensor([1.0]))
+        cdf_values = normal_dist.cdf(normalized_hypervector)
+
+        binary_width = 1.0/(2**self.bit_precision)
+        
+        quantized_values = torch.floor(cdf_values / binary_width) * binary_width
+
+        self.quantized_hypervector = torch.zeros_like(quantized_values)
+        self.quantized_hypervector.scatter_(0, indices, quantized_values)
+    
+    def quantize_arbitary_sequence(self, data):
+        sorted_hypervector, indices = torch.sort(data)
+
+        mean = torch.mean(sorted_hypervector)
+        std = torch.std(sorted_hypervector)
+        normalized_hypervector = (sorted_hypervector - mean) / std
+
+        normal_dist = Normal(torch.tensor([0.0]), torch.tensor([1.0]))
+        cdf_values = normal_dist.cdf(normalized_hypervector)
+
+        binary_width = 1.0/(2**self.bit_precision)
+        
+        quantized_values = torch.floor(cdf_values / binary_width) * binary_width
+
+        quantized_data = torch.zeros_like(quantized_values)
+        quantized_data.scatter_(0, indices, quantized_values)
+
+        return quantized_data
+    
+    def hamming_distance(self, hypervector1, hypervector2):
+        return torch.sum(torch.abs(hypervector1 - hypervector2))
+    
+    def train(self, epoch, lr, threshold, return_info, return_data):
+        train_dataset = self.dna_dataset
+        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=False)
+        list_accuracy = []
+        true_similarity = []
+        false_similarity = []
+
+        if return_info:
+            print("Train size: {}".format(len(train_dataset)))
+
+        for e in range(epoch):
+            correct_cnt = 0
+            tp_cnt = 0
+            tn_cnt = 0
+            fp_cnt = 0
+            fn_cnt = 0
+
+            true_similarity.append([])
+            false_similarity.append([])
+
+            for i, data in enumerate(train_dataloader):
+                similarity = 0
+
+                query = torch.squeeze(data['dna_subsequence'])
+                encoded_query = self.binding_arbitary_sequence(query)
+                quantized_query = self.quantize_arbitary_sequence(encoded_query)
+
+                label = data['label'].item()
+
+                similarity = self.hamming_distance(self.quantized_hypervector, quantized_query)
+
+                if (similarity < threshold) and (label == False):
+                    tn_cnt += 1
+                    correct_cnt += 1
+                elif (similarity >= threshold) and (label == True):
+                    tp_cnt += 1
+                    correct_cnt += 1
+                elif (similarity >= threshold) and (label == False):
+                    self.encoded_hypervector -= lr * encoded_query
+                    self.quantize()
+                    fn_cnt += 1
+                else:
+                    self.encoded_hypervector += lr * encoded_query
+                    self.quantize()
+                    fp_cnt += 1
+
+                if label is True:
+                    true_similarity[e].append(similarity)
+                else:
+                    false_similarity[e].append(similarity)
+
+            accuracy = round(correct_cnt / len(train_dataset)*100, 2)
+            list_accuracy.append(accuracy)
+
+            if return_info:
+                print("Epoch: {} | Accuracy: {}% | TP: {} | TN: {} | FP: {} | FN: {}".format(e, accuracy, tp_cnt, tn_cnt, fp_cnt, fn_cnt))
+        
+        if return_data:
+            return list_accuracy, true_similarity, false_similarity
