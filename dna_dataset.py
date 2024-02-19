@@ -38,13 +38,12 @@ class Dataset(torch.utils.data.Dataset):
         self.dna_false_subsequences = torch.stack([torch.tensor(subseq, dtype=torch.int64) for subseq in self.dna_false_subsequences])
 
 
-        # Combine true and false subsequences\
+        # Combine true and false subsequences
         # use index_list to shuffle dna_true_subsequences
-        self.samples = torch.cat((self.dna_true_subsequences[:number_of_true], self.dna_false_subsequences[:number_of_false]), dim=0)
-
-        # Shuffle the indices
-        self.indices = list(range(len(self.samples)))
-        random.shuffle(self.indices)
+        numbers = list(range(0, len(self.dna_true_subsequences)))
+        index_tensor = torch.tensor(random.sample(numbers, 50), dtype=torch.long)
+        true_subsequences_subset = torch.index_select(self.dna_true_subsequences, 0, index_tensor)
+        self.samples = torch.cat((true_subsequences_subset, self.dna_false_subsequences[:number_of_false]), dim=0)
 
     def __len__(self):
         return len(self.samples)
