@@ -39,6 +39,7 @@ class HDGIM:
         for shift, subsequence in enumerate(self.dna_subsequences):
             chunk_hypervector = torch.ones((1, self.dimension))
             
+            # use shift here
             for base_num in subsequence:
                 base_index = base_num.item()
                 base_hypervector = self.base_hypervectors[base_index]
@@ -53,6 +54,7 @@ class HDGIM:
     def binding_arbitrary_sequence(self, data):
         encoded_data_hypervector = torch.ones((1, self.dimension))
         
+        # use enumerate here
         for base_num in data:
             base_index = base_num.item()
             base_hypervector = self.base_hypervectors[base_index]
@@ -69,7 +71,8 @@ class HDGIM:
         cdf_values = normal_dist.cdf(normalized_hypervector)
 
         binary_width = 1.0/(2**self.bit_precision)
-        quantized_values = torch.floor(cdf_values / binary_width)
+
+        quantized_values = (torch.floor(cdf_values / binary_width) * (2**self.bit_precision)).long
 
         self.quantized_hypervector = quantized_values
     
@@ -167,6 +170,8 @@ class HDGIM:
                 label = data['label'].item()
                 sim = (self.hamming_distance(self.quantized_hypervector_with_noise, quantized_query_with_noise)) / self.dimension
 
+                # test many thresholds
+                # 30~50 epochs is good for testing 
                 if (sim < threshold) and not label:
                     tn_cnt += 1
                     correct_cnt += 1

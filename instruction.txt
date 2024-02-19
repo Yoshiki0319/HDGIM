@@ -1,0 +1,18 @@
+Here are some papers you can read:
+HDC clustering: A Framework for Efficient and Binary Clustering in High-Dimensional Space
+HDC classifier: OnlineHD: Robust, Efficient, and Single-Pass Online Learning Using Hyperdimensional System**
+HDC graph encoding/decoding: GrapHD: Graph-Based Hyperdimensional Memorization for Brain-Like Cognitive Learning
+HDC for CiM (Computing in Memory): QuantHD: A Quantization Framework for Hyperdimensional Computing**
+HDC for edge computing: Scalable Edge-Based Hyperdimensional Learning System with Brain-Like Neural Adaptation
+Genomic sequence search:
+BioHD: An Efficient Genome Sequence Search Platform Using HyperDimensional Memorization
+HDGIM: Hyperdimensional Genome Sequence Matching on Unreliable highly scaled FeFET**
+
+Your assignment is implementing HDGIM in python using the Pytorch library.
+The highlighted ones (with **) are directly related to the assignment. 
+By reading the HDC classifier paper, you can understand the basic HDC operations and how to do classification tasks using HDC. 
+And by reading the HDC for CiM paper, you can see how we quantize the HDC model. 
+For the quantization part especially, it contains hardware design parts but you can ignore them and read the software/model design part only.
+The assignment goal is to reproduce the figure 6 in the HDGIM paper. 
+This paper also contains hardware design parts, but you can also ignore them. 
+(However, it would be good to understand why CiM technology is important)
