@@ -36,16 +36,14 @@ class HDGIM:
     
     def binding(self):
         chunk_hypervectors = []
-        for shift, subsequence in enumerate(self.dna_subsequences):
+        for subsequence in self.dna_subsequences:
             chunk_hypervector = torch.ones((1, self.dimension))
-            
-            # use shift here
-            for base_num in subsequence:
-                base_index = base_num.item()
-                base_hypervector = self.base_hypervectors[base_index]
-                chunk_hypervector = chunk_hypervector * base_hypervector  
 
-            chunk_hypervector = torch.roll(chunk_hypervector, shifts=shift, dims=0) 
+            for index, base_num in enumerate(subsequence):
+                base_index = base_num.item() 
+                shifted_base_hypervector = torch.roll(self.base_hypervectors[base_index], shifts=index, dims=0)
+                chunk_hypervector = torch.squeeze(torch.mul(chunk_hypervector, shifted_base_hypervector))
+
             chunk_hypervectors.append(chunk_hypervector)
         
         self.hdc_library = torch.stack(chunk_hypervectors)
@@ -54,12 +52,11 @@ class HDGIM:
     def binding_arbitrary_sequence(self, data):
         encoded_data_hypervector = torch.ones((1, self.dimension))
         
-        # use enumerate here
-        for base_num in data:
+        for index, base_num in enumerate(data):
             base_index = base_num.item()
-            base_hypervector = self.base_hypervectors[base_index]
-            encoded_data_hypervector = torch.mul(encoded_data_hypervector, base_hypervector)  
-        
+            shifted_base_hypervector = torch.roll(self.base_hypervectors[base_index], shifts=index, dims=0)
+            encoded_data_hypervector = torch.squeeze(torch.mul(encoded_data_hypervector, shifted_base_hypervector))
+
         return encoded_data_hypervector
     
     def quantize(self):
