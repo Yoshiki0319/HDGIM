@@ -26,8 +26,6 @@ class HDGIM:
         self.hdc_library = None
 
         self.quantized_hypervector_with_noise = None
-
-
     def generate_base_hypervectors(self):
         return {
             num: torch.empty(self.dimension).uniform_(-torch.pi, torch.pi)
@@ -68,11 +66,10 @@ class HDGIM:
         cdf_values = normal_dist.cdf(normalized_hypervector)
 
         binary_width = 1.0/(2**self.bit_precision)
-
-        quantized_values = (torch.floor(cdf_values / binary_width) * (2**self.bit_precision)).long
+        quantized_values = (torch.floor(cdf_values / binary_width) * (2**self.bit_precision)).long()
 
         self.quantized_hypervector = quantized_values
-    
+
     def quantize_arbitrary_sequence(self, data):
         mean = torch.mean(data)
         std = torch.std(data)
@@ -82,60 +79,60 @@ class HDGIM:
         cdf_values = normal_dist.cdf(normalized_data)
 
         binary_width = 1.0/(2**self.bit_precision)
-        quantized_values = torch.floor(cdf_values / binary_width)
+        quantized_values = (torch.floor(cdf_values / binary_width) * (2**self.bit_precision)).long()
 
         return quantized_values
     
     def adding_noise(self):
         self.quantized_hypervector_with_noise = self.quantized_hypervector.clone()
-        for i in range(self.quantized_hypervector_with_noise.size(0)):
-            for j in range(self.quantized_hypervector_with_noise.size(1)):
-                is_changed = random.random() < self.noise
-                if not is_changed:
-                    continue
 
+        for i in range(len(self.quantized_hypervector_with_noise)):
+            is_changed = random.random() < self.noise
+            if not is_changed:
+                continue
+
+            num = self.quantized_hypervector_with_noise[i].item()
+            is_in_range = 0
+
+            if num == 0:
+                is_in_range = 1
+            elif num == pow(2, self.bit_precision) - 1:
                 is_in_range = 0
-                num = self.quantized_hypervector_with_noise[i][j].item()
+            else:
+                is_in_range = random.randint(0, 1)
 
-                if num == 0:
-                    is_in_range = 1
-                elif num == pow(2, self.bit_precision) - 1:
-                    is_in_range = 0
-                else:
-                    is_in_range = random.randint(0, 1)
-
-                changed_value = -1 if is_in_range == 0 else 1
-                noise_value = num + changed_value
-                self.quantized_hypervector_with_noise[i][j] = noise_value
+            changed_value = -1 if is_in_range == 0 else 1
+            noise_value = num + changed_value
+            self.quantized_hypervector_with_noise[i] = noise_value
 
     def adding_noise_arbitrary_sequence(self, data):
         quantized_data_with_noise = data.clone()
-        for i in range(quantized_data_with_noise.size(0)):
-            for j in range(quantized_data_with_noise.size(1)):
-                is_changed = random.random() < self.noise
-                if not is_changed:
-                    continue
 
+        for i, num in enumerate(quantized_data_with_noise):
+            is_changed = random.random() < self.noise
+            if not is_changed:
+                continue
+
+            is_in_range = 0
+            num = quantized_data_with_noise[i].item()
+
+            if num == 0:
+                is_in_range = 1
+            elif num == pow(2, self.bit_precision) - 1:
                 is_in_range = 0
-                num = quantized_data_with_noise[i][j].item()
+            else:
+                is_in_range = random.randint(0, 1)
 
-                if num == 0:
-                    is_in_range = 1
-                elif num == pow(2, self.bit_precision) - 1:
-                    is_in_range = 0
-                else:
-                    is_in_range = random.randint(0, 1)
-
-                changed_value = -1 if is_in_range == 0 else 1
-                noise_value = num + changed_value
-                quantized_data_with_noise[i][j] = noise_value
-
+            changed_value = -1 if is_in_range == 0 else 1
+            noise_value = num + changed_value
+            quantized_data_with_noise[i] = noise_value
+        
         return quantized_data_with_noise
     
     def hamming_distance(self, hypervector1, hypervector2):
         return torch.sum(torch.abs(hypervector1 - hypervector2))
     
-    def train(self, epoch, lr, threshold, return_info, return_data):
+    def train(self, epoch, lr, threshold, return_info, return_data):        
         train_dataset = self.dna_dataset
         
         train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)
@@ -166,6 +163,7 @@ class HDGIM:
 
                 label = data['label'].item()
                 sim = (self.hamming_distance(self.quantized_hypervector_with_noise, quantized_query_with_noise)) / self.dimension
+                # print(sim)
 
                 # test many thresholds
                 # 30~50 epochs is good for testing 
@@ -195,7 +193,7 @@ class HDGIM:
             list_accuracy.append(accuracy)
 
             if return_info:
-                print(f"Epoch: {e} | Accuracy: {accuracy}% | TP: {tp_cnt} | TN: {tn_cnt} | FP: {fp_cnt} | FN: {fn_cnt}")
+                print(f"Epoch {e+1}, Accuracy: {accuracy}%, TP: {tp_cnt}, TN: {tn_cnt}, FP: {fp_cnt}, FN: {fn_cnt}")
 
         if return_data:
             return list_accuracy, true_similarity, false_similarity

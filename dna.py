@@ -11,7 +11,7 @@ class DNASequenceGenerator:
     def generate_dna_sequence_tensor(self):
         dna_sequence = [random.choice(self.bases) for _ in range(self.dna_sequence_length)]
         convert = {'A': 0, 'T': 1, 'C': 2, 'G': 3}
-        return torch.tensor([convert[base] for base in dna_sequence], dtype=torch.int64)
+        return torch.tensor([convert[base] for base in dna_sequence], dtype=torch.long)
 
 class Encoder:
     def __init__(self, dna_sequence_length, dna_subsequences_length):
