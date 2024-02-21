@@ -4,6 +4,7 @@ from torch.distributions.normal import Normal
 import random
 from torch.utils.data import DataLoader
 
+
 class HDGIM:
     def __init__(self, dimension, dna_sequence_length, dna_subsequences_length, number_of_true, number_of_false, bit_precision, noise, seed=42):
         self.dimension = dimension
@@ -134,7 +135,6 @@ class HDGIM:
     
     def train(self, epoch, lr, threshold, return_info, return_data):        
         train_dataset = self.dna_dataset
-        
         train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)
         list_accuracy = []
         true_similarity = []
@@ -163,6 +163,67 @@ class HDGIM:
 
                 label = data['label'].item()
                 sim = (self.hamming_distance(self.quantized_hypervector_with_noise, quantized_query_with_noise)) / self.dimension
+
+                if (sim < threshold) and not label:
+                    tn_cnt += 1
+                    correct_cnt += 1
+                elif (sim >= threshold) and label:
+                    tp_cnt += 1
+                    correct_cnt += 1
+                elif (sim >= threshold) and not label:
+                    self.encoded_hypervector -= lr * encoded_query
+                    fn_cnt += 1
+                elif (sim < threshold) and label:
+                    self.encoded_hypervector += lr * encoded_query
+                    fp_cnt += 1
+
+                if label:
+                    true_similarity[e].append(sim)
+                else:
+                    false_similarity[e].append(sim)
+
+            # Perform quantizing and adding noise at the end of each epoch
+            self.quantize()
+            self.adding_noise()
+
+            accuracy = round(correct_cnt * 100 / len(train_dataset), 2)
+            list_accuracy.append(accuracy)
+
+            if return_info:
+                print(f"Epoch {e+1}, Accuracy: {accuracy}%, TP: {tp_cnt}, TN: {tn_cnt}, FP: {fp_cnt}, FN: {fn_cnt}")
+
+        if return_data:
+            return list_accuracy, true_similarity, false_similarity
+        
+    def training_full_precision(self, epoch, lr, threshold, return_info, return_data):
+        train_dataset = self.dna_dataset
+        
+        train_dataloader = DataLoader(train_dataset, batch_size=1, shuffle=True)
+        list_accuracy = []
+        true_similarity = []
+        false_similarity = []
+
+        if return_info:
+            print("Train size: {}".format(len(train_dataset)))
+
+        for e in range(epoch):
+            correct_cnt = 0
+            tp_cnt = 0
+            tn_cnt = 0
+            fp_cnt = 0
+            fn_cnt = 0
+
+            true_similarity.append([])
+            false_similarity.append([])
+
+            for data in train_dataloader:
+                sim = 0
+
+                query = torch.squeeze(data['dna_subsequence'])
+                encoded_query = self.binding_arbitrary_sequence(query)
+
+                label = data['label'].item()
+                sim = torch.nn.functional.cosine_similarity(self.encoded_hypervector, encoded_query, dim=0)
                 # print(sim)
 
                 # test many thresholds
@@ -196,4 +257,4 @@ class HDGIM:
                 print(f"Epoch {e+1}, Accuracy: {accuracy}%, TP: {tp_cnt}, TN: {tn_cnt}, FP: {fp_cnt}, FN: {fn_cnt}")
 
         if return_data:
-            return list_accuracy, true_similarity, false_similarity
+            return list_accuracy, true_similarity, false_similarity    
