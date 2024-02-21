@@ -2,12 +2,12 @@ import numpy as np
 import hdgim
 import torch
 
-dimension = 10000
+dimension = 4500
 dna_sequence_length = 1000
 dna_subsequences_length = 20
 number_of_true = 50
 number_of_false = 50
-bit_precision = 2
+bit_precision = 4
 noise = 0.2
 
 hdgim_instance = hdgim.HDGIM(dimension, dna_sequence_length, dna_subsequences_length, number_of_true, number_of_false, bit_precision, noise)
@@ -18,7 +18,7 @@ hdgim_instance.adding_noise()
 
 epoch = 10
 lr = 1
-thresholds = np.arange(2, 3, 0.001)
+thresholds = np.arange(-0.1, 0.1, 0.001)
 
 best_accuracy = 0
 best_threshold = None

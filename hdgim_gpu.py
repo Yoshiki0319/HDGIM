@@ -1,4 +1,4 @@
-import dna_dataset
+import dna_dataset_gpu
 import torch
 from torch.distributions.normal import Normal
 import random
@@ -16,7 +16,7 @@ class HDGIM:
         self.noise = noise
         random.seed(seed)
         
-        self.dna_dataset = dna_dataset.Dataset(dna_sequence_length, dna_subsequences_length, number_of_true, number_of_false)
+        self.dna_dataset = dna_dataset_gpu.Dataset(dna_sequence_length, dna_subsequences_length, number_of_true, number_of_false)
 
         self.dna_sequence = self.dna_dataset.dna_sequence
         self.dna_subsequences = self.dna_dataset.samples
@@ -29,41 +29,41 @@ class HDGIM:
         self.quantized_hypervector_with_noise = None
     def generate_base_hypervectors(self):
         return {
-            num: torch.empty(self.dimension).uniform_(-torch.pi, torch.pi)
+            num: torch.empty(self.dimension).uniform_(-torch.pi, torch.pi).to('cuda')
             for num in range(4)
         }
     
     def binding(self):
         chunk_hypervectors = []
         for subsequence in self.dna_subsequences:
-            chunk_hypervector = torch.ones((1, self.dimension))
+            chunk_hypervector = torch.ones((1, self.dimension)).to('cuda')
 
             for index, base_num in enumerate(subsequence):
                 base_index = base_num.item() 
-                shifted_base_hypervector = torch.roll(self.base_hypervectors[base_index], shifts=index, dims=0)
-                chunk_hypervector = torch.squeeze(torch.mul(chunk_hypervector, shifted_base_hypervector))
+                shifted_base_hypervector = torch.roll(self.base_hypervectors[base_index], shifts=index, dims=0).to('cuda')
+                chunk_hypervector = torch.squeeze(torch.mul(chunk_hypervector, shifted_base_hypervector)).to('cuda')
 
             chunk_hypervectors.append(chunk_hypervector)
         
-        self.hdc_library = torch.stack(chunk_hypervectors)
-        self.encoded_hypervector = torch.sum(self.hdc_library, dim=0)
+        self.hdc_library = torch.stack(chunk_hypervectors).to('cuda')
+        self.encoded_hypervector = torch.sum(self.hdc_library, dim=0).to('cuda')
 
     def binding_arbitrary_sequence(self, data):
-        encoded_data_hypervector = torch.ones((1, self.dimension))
+        encoded_data_hypervector = torch.ones((1, self.dimension)).to('cuda')
         
         for index, base_num in enumerate(data):
             base_index = base_num.item()
-            shifted_base_hypervector = torch.roll(self.base_hypervectors[base_index], shifts=index, dims=0)
-            encoded_data_hypervector = torch.squeeze(torch.mul(encoded_data_hypervector, shifted_base_hypervector))
+            shifted_base_hypervector = torch.roll(self.base_hypervectors[base_index], shifts=index, dims=0).to('cuda')
+            encoded_data_hypervector = torch.squeeze(torch.mul(encoded_data_hypervector, shifted_base_hypervector)).to('cuda')
 
         return encoded_data_hypervector
     
     def quantize(self):
-        mean = torch.mean(self.encoded_hypervector)
-        std = torch.std(self.encoded_hypervector)
+        mean = torch.mean(self.encoded_hypervector).to('cuda')
+        std = torch.std(self.encoded_hypervector).to('cuda')
         normalized_hypervector = (self.encoded_hypervector - mean) / std
 
-        normal_dist = Normal(torch.tensor([0.0]), torch.tensor([1.0]))
+        normal_dist = Normal(torch.tensor([0.0], device='cuda'), torch.tensor([1.0], device='cuda'))
         cdf_values = normal_dist.cdf(normalized_hypervector)
 
         binary_width = 1.0/(2**self.bit_precision)
@@ -72,11 +72,11 @@ class HDGIM:
         self.quantized_hypervector = quantized_values
 
     def quantize_arbitrary_sequence(self, data):
-        mean = torch.mean(data)
-        std = torch.std(data)
+        mean = torch.mean(data).to('cuda')
+        std = torch.std(data).to('cuda')
         normalized_data = (data - mean) / std
 
-        normal_dist = Normal(torch.tensor([0.0]), torch.tensor([1.0]))
+        normal_dist = Normal(torch.tensor([0.0], device='cuda'), torch.tensor([1.0], device='cuda'))
         cdf_values = normal_dist.cdf(normalized_data)
 
         binary_width = 1.0/(2**self.bit_precision)
@@ -131,7 +131,7 @@ class HDGIM:
         return quantized_data_with_noise
     
     def hamming_distance(self, hypervector1, hypervector2):
-        return torch.sum(torch.abs(hypervector1 - hypervector2))
+        return torch.sum(torch.abs(hypervector1 - hypervector2)).to('cuda')
     
     def train(self, epoch, lr, threshold, return_info, return_data):        
         train_dataset = self.dna_dataset
@@ -156,14 +156,14 @@ class HDGIM:
             for data in train_dataloader:
                 sim = 0
 
-                query = torch.squeeze(data['dna_subsequence'])
+                query = torch.squeeze(data['dna_subsequence']).to('cuda')
                 encoded_query = self.binding_arbitrary_sequence(query)
                 quantized_query = self.quantize_arbitrary_sequence(encoded_query)
                 quantized_query_with_noise = self.adding_noise_arbitrary_sequence(quantized_query)
 
                 label = data['label'].item()
                 sim = (self.hamming_distance(self.quantized_hypervector_with_noise, quantized_query_with_noise)) / self.dimension
-                print(sim)
+                # print(sim)
 
                 if (sim < threshold) and not label:
                     tn_cnt += 1
@@ -220,11 +220,11 @@ class HDGIM:
             for data in train_dataloader:
                 sim = 0
 
-                query = torch.squeeze(data['dna_subsequence'])
+                query = torch.squeeze(data['dna_subsequence']).to('cuda')
                 encoded_query = self.binding_arbitrary_sequence(query)
 
                 label = data['label'].item()
-                sim = torch.nn.functional.cosine_similarity(self.encoded_hypervector, encoded_query, dim=0)
+                sim = torch.nn.functional.cosine_similarity(self.encoded_hypervector, encoded_query, dim=0).to('cuda')
                 # print(sim)
 
                 # test many thresholds

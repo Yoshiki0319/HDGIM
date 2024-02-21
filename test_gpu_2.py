@@ -1,5 +1,5 @@
 import numpy as np
-import hdgim
+import hdgim_gpu as hdgim
 import torch
 
 dimension = 512
@@ -17,19 +17,24 @@ hdgim_instance.quantize()
 hdgim_instance.adding_noise()
 
 epoch = 10
-lr = 1000
+lr = 1
 thresholds = np.arange(-0.1, 0.1, 0.001)
 
 best_accuracy = 0
 best_threshold = None
 
 for threshold in thresholds:
-    accuracy_list, true_sim, false_sim = hdgim_instance.training_full_precision(epoch=epoch, lr=lr, threshold=threshold, return_info=False, return_data=True)
+    accuracy_list, true_sim, false_sim = hdgim_instance.training_full_precision(epoch=epoch, lr=lr, threshold=threshold, return_info=True, return_data=True)
     current_best_accuracy = max(accuracy_list)
+    
     if current_best_accuracy > best_accuracy:
         best_accuracy = current_best_accuracy
         best_threshold = threshold
+    
     print(f"Accuracy: {current_best_accuracy}% at Threshold: {threshold}")
+    
+    if best_accuracy == 100:
+        break
 
 # 最適な閾値と精度の表示
 print(f"Best Accuracy: {best_accuracy}% at Best Threshold: {best_threshold}")

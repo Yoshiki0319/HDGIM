@@ -1,9 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import hdgim
-import torch
+import hdgim_gpu as hdgim
 
+# パラメータ範囲の設定
 dimensions = [512, 4500, 10000]
 bit_precisions = [2, 3, 4]
 noises = [0.2, 0.5, 0.8]
@@ -12,13 +12,10 @@ dna_subsequences_length = 20
 number_of_true = 50
 number_of_false = 50
 epoch = 10
-lr = 0.1
-thresholds_512 = np.arange(1.5, 3.5, 0.001)
-thresholds_4500_2 = np.arange(2, 3, 0.001)
-thresholds_4500_3_4 = np.arange(6, 8, 0.001)
-thresholds_10000 = np.arange(2.4, 2.7, 0.001)
-thresholds_10000_3 = np.arange(6, 8, 0.001)
+lr = 1
+thresholds = np.arange(2, 4, 0.001)
 
+# 結果を保存するためのデータ構造
 results = np.zeros((len(noises), len(dimensions), len(bit_precisions)))
 
 for i, dimension in enumerate(dimensions):
@@ -31,17 +28,16 @@ for i, dimension in enumerate(dimensions):
 
             best_accuracy = 0
             best_threshold = None
-            consecutive_declines = 0 
+            consecutive_declines = 0  # 連続して精度が落ちる回数を追跡
 
             for threshold in thresholds:
-                print(f"Threshold: {threshold}")
                 accuracy_list, true_sim, false_sim = hdgim_instance.train(epoch=epoch, lr=lr, threshold=threshold, return_info=True, return_data=True)
                 current_best_accuracy = max(accuracy_list)
                 
                 if current_best_accuracy >= best_accuracy:
                     best_accuracy = current_best_accuracy
                     best_threshold = threshold
-                    consecutive_declines = 0  
+                    consecutive_declines = 0  # 精度が改善されたらリセット
                 else:
                     consecutive_declines += 1
                 
@@ -51,6 +47,7 @@ for i, dimension in enumerate(dimensions):
             results[k, i, j] = best_accuracy
             print(f"Dimension: {dimension}, Bit Precision: {bit_precision}, Noise: {noise}, Best Accuracy: {best_accuracy}%, Best Threshold: {best_threshold}")
 
+# ヒートマップの表示
 for j, bit_precision in enumerate(bit_precisions):
     plt.figure(figsize=(10, 8))
     sns.heatmap(results[:, :, j], annot=True, fmt=".2f", xticklabels=dimensions, yticklabels=noises, cmap="viridis")
