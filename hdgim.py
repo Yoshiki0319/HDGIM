@@ -163,6 +163,7 @@ class HDGIM:
 
                 label = data['label'].item()
                 sim = (self.hamming_distance(self.quantized_hypervector_with_noise, quantized_query_with_noise)) / self.dimension
+                #print(sim)
 
                 if (sim < threshold) and not label:
                     tn_cnt += 1
@@ -236,13 +237,9 @@ class HDGIM:
                     correct_cnt += 1
                 elif (sim >= threshold) and not label:
                     self.encoded_hypervector -= lr * encoded_query
-                    self.quantize()
-                    self.adding_noise()
                     fn_cnt += 1
                 elif (sim < threshold) and label:
                     self.encoded_hypervector += lr * encoded_query
-                    self.quantize()
-                    self.adding_noise()
                     fp_cnt += 1
 
                 if label:
