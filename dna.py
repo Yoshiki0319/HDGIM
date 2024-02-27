@@ -9,8 +9,14 @@ class DNASequenceGenerator:
         random.seed(self.seed)
     
     def generate_dna_sequence_tensor(self):
-        dna_sequence = [random.choice(self.bases) for _ in range(self.dna_sequence_length)]
+        # The original mapping of nucleotide bases to integers
         convert = {'A': 0, 'T': 1, 'C': 2, 'G': 3}
+        
+        # Generate a random DNA sequence with an additional step to shuffle the sequence to ensure more randomness
+        dna_sequence = [random.choice(self.bases) for _ in range(self.dna_sequence_length)]
+        random.shuffle(dna_sequence)  # Shuffle the generated sequence to add more randomness
+        
+        # Convert the sequence to a tensor of integers
         return torch.tensor([convert[base] for base in dna_sequence], dtype=torch.long)
 
 class Encoder:
