@@ -39,12 +39,12 @@ class HDGIM:
     def binding(self):
         chunk_hypervectors = []
         for subsequence in self.dna_subsequences:
-            chunk_hypervector = torch.ones(self.dimension)
+            chunk_hypervector = torch.zeros(self.dimension)
 
             for index, base_num in enumerate(subsequence):
                 base_index = base_num.item()
                 shifted_base_hypervector = torch.roll(self.base_hypervectors[base_index], shifts=index, dims=0)
-                chunk_hypervector = torch.squeeze(torch.mul(chunk_hypervector, shifted_base_hypervector))
+                chunk_hypervector = torch.squeeze(torch.mul(-shifted_base_hypervector, shifted_base_hypervector))
 
             chunk_hypervectors.append(chunk_hypervector)
         
@@ -52,46 +52,50 @@ class HDGIM:
         self.encoded_hypervector = torch.sum(self.hdc_library, dim=0)
 
     def binding_arbitrary_sequence(self, data):
-        encoded_data_hypervector = torch.ones(self.dimension)
+        chunk_hypervector = torch.zeros(self.dimension)
         
         for index, base_num in enumerate(data):
             base_index = base_num.item()
             shifted_base_hypervector = torch.roll(self.base_hypervectors[base_index], shifts=index, dims=0)
-            encoded_data_hypervector = torch.squeeze(torch.mul(encoded_data_hypervector, shifted_base_hypervector))
+            chunk_hypervector = torch.squeeze(torch.mul(-shifted_base_hypervector, shifted_base_hypervector))
 
-        return encoded_data_hypervector
+        return chunk_hypervector
     
     def quantize(self):
-        sorted, indices = torch.sort(self.encoded_hypervector)
+        sorted_values, indices = torch.sort(self.encoded_hypervector)
 
-        mean = torch.mean(sorted)
-        std = torch.std(sorted)
-        normalized_hypervector = (sorted - mean) / std
+        mean = torch.mean(sorted_values)
+        std = torch.std(sorted_values)
+        normalized_hypervector = (sorted_values - mean) / std
 
         normal_dist = Normal(0, 1)
         cdf_values = normal_dist.cdf(normalized_hypervector)
         self.quantized_hypervector_cdf = cdf_values.clone()
 
-        binary_width = 1.0/(2**self.bit_precision)
+        binary_width = 1.0 / (2 ** self.bit_precision)
         quantized_values = (torch.floor(cdf_values / binary_width)).long()
 
-        self.quantized_hypervector = quantized_values[torch.argsort(indices)]
+        # Calculate the inverse sorting index once for efficiency
+        inv_indices = torch.argsort(indices)
+        self.quantized_hypervector = quantized_values[inv_indices]
 
     def quantize_arbitrary_sequence(self, data):
-        sorted, indices = torch.sort(data)
+        sorted_values, indices = torch.sort(data)
 
-        mean = torch.mean(sorted)
-        std = torch.std(sorted)
-        normalized_hypervector = (sorted - mean) / std
+        mean = torch.mean(sorted_values)
+        std = torch.std(sorted_values)
+        normalized_data = (sorted_values - mean) / std
 
         normal_dist = Normal(0, 1)
-        cdf_values = normal_dist.cdf(normalized_hypervector)
+        cdf_values = normal_dist.cdf(normalized_data)
         self.quantized_hypervector_cdf = cdf_values.clone()
 
-        binary_width = 1.0/(2**self.bit_precision)
+        binary_width = 1.0 / (2 ** self.bit_precision)
         quantized_values = (torch.floor(cdf_values / binary_width)).long()
 
-        return quantized_values[torch.argsort(indices)]
+        # Use the inverse sorting index for reordering to original positions
+        inv_indices = torch.argsort(indices)
+        return quantized_values[inv_indices]
     
     def adding_noise(self):
         self.quantized_hypervector_with_noise = self.quantized_hypervector.clone()
